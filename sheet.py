@@ -4,7 +4,7 @@ Googleスプレッドシートの読み書きを担当するモジュール。
 環境変数:
   GOOGLE_SERVICE_ACCOUNT_JSON : サービスアカウントのJSON鍵(文字列そのまま)
   SPREADSHEET_ID              : 対象スプレッドシートのID
-  SHEET_NAME                  : 対象シート名(例: "営業リスト")
+  SHEET_NAME                  : 対象シート名(例: "シート1")
 """
 
 import os
@@ -16,17 +16,18 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
-# スプレッドシートの列構成(1始まり)。実際の列順に合わせて調整してください。
+# スプレッドシートの列構成(1始まり)。沖縄営業リストの実際の列に合わせました。
 COL_HOUJIN_BANGOU = 1
 COL_COMPANY_NAME = 2
 COL_ADDRESS = 3
-COL_HP = 4
-COL_TEL = 5
-COL_MAIL = 6
-COL_FORM_URL = 7
-COL_EMPLOYEE_COUNT = 8
-COL_FETCHED_AT = 9
-COL_STATUS = 10  # "済" / 空欄(未取得) / "一部取得" など
+COL_INDUSTRY = 4          # 業種(Places形式)
+COL_HP = 5
+COL_TEL = 6
+COL_MAIL = 7
+COL_FORM_URL = 8
+COL_EMPLOYEE_COUNT = 9
+COL_FETCHED_AT = 10
+COL_STATUS = 11
 
 
 def _get_client():
@@ -45,7 +46,7 @@ def get_worksheet():
 def fetch_unprocessed_companies(limit=100):
     """
     未取得(STATUS列が空欄)の企業行を最大limit件取得する。
-    戻り値: [{"row": 行番号, "houjin_bangou": str, "company_name": str, "address": str}, ...]
+    戻り値: [{"row": 行番号, "houjin_bangou": str, "company_name": str, "address": str, "industry": str}, ...]
     """
     ws = get_worksheet()
     all_values = ws.get_all_values()  # ヘッダー行込み
@@ -60,6 +61,7 @@ def fetch_unprocessed_companies(limit=100):
             "houjin_bangou": row[COL_HOUJIN_BANGOU - 1] if len(row) >= COL_HOUJIN_BANGOU else "",
             "company_name": row[COL_COMPANY_NAME - 1] if len(row) >= COL_COMPANY_NAME else "",
             "address": row[COL_ADDRESS - 1] if len(row) >= COL_ADDRESS else "",
+            "industry": row[COL_INDUSTRY - 1] if len(row) >= COL_INDUSTRY else "",
         })
         if len(targets) >= limit:
             break
@@ -85,9 +87,9 @@ def update_companies(results):
             r.get("fetched_at", ""),
             r.get("status", ""),
         ]
-        # HP列(D)からSTATUS列(J)までをまとめて更新
+        # HP列(E)からSTATUS列(K)までをまとめて更新
         data.append({
-            "range": f"D{row}:J{row}",
+            "range": f"E{row}:K{row}",
             "values": [values],
         })
 
