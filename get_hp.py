@@ -1,20 +1,67 @@
-# -*- coding: utf-8 -*-
 """
-HP(公式サイト)取得モジュール。優先度は低いため、当面は取得できなくても
-処理全体は継続する(TEL・従業員数の取得を優先)。
-
-既存のGASロジックがあればここに移植する。将来的にボリュームが増えて
-GASでは処理しきれなくなった場合は、有償SERP API(SerpApi/DataForSEO等)へ
-切り替える。
-
-TODO:
-  - 既存GASのHP特定ロジックをPythonに移植 or 同等のAPIに置き換え
+HP(公式サイト)取得モジュール。Google Places API を使用。
 """
 
+import os
+import requests
 
-def get_hp(company_name: str, houjin_bangou: str = "") -> str | None:
-    """
-    企業名(+法人番号)から公式サイトURLを取得する。取得できなければNone。
-    """
-    # --- 未実装。見つからなければNoneを返すだけでOK(必須項目ではないため) ---
-    return None
+PLACES_API_KEY = os.environ.get("PLACES_API_KEY", "")
+
+
+def get_hp(company_name, address=""):
+    if not company_name or not PLACES_API_KEY:
+        return None, None
+
+    try:
+        result = _search_places(company_name, address)
+        if result:
+            return result.get("url"), result.get("tel")
+    except Exception:
+        pass
+
+    return None, None
+
+
+def _search_places(company_name, address):
+    city_match = None
+    for pref_marker in ['県', '都', '府', '道']:
+        if pref_marker in address:
+            idx = address.index(pref_marker)
+            city_match = address[:idx + 3]
+            break
+
+    city = city_match if city_match else ""
+    query = f"{company_name} {city}".strip()
+
+    url = "https://places.googleapis.com/v1/places:searchText"
+    payload = {
+        "textQuery": query,
+        "languageCode": "ja"
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": PLACES_API_KEY,
+        "X-Goog-FieldMask": "places.displayName,places.websiteUri,places.nationalPhoneNumber,places.businessStatus"
+    }
+
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+
+        if not data.get("places"):
+            return None
+
+        place = data["places"][0]
+
+        if place.get("businessStatus") == "CLOSED_PERMANENTLY":
+            return None
+
+        return {
+            "url": place.get("websiteUri") or "",
+            "tel": place.get("nationalPhoneNumber") or "",
+        }
+
+    except requests.RequestException:
+        return None
