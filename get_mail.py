@@ -1,13 +1,13 @@
 """
-メールアドレス取得モジュール。HPからメールアドレスを抽出する。
+メールアドレス取得モジュール。
+
+優先順位:
+  1. <a href="mailto:...">リンク(最も確実)
+  2. 全文テキストの正規表現(ノイズ除外あり)
 """
 
 import re
-import requests
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-}
+from bs4 import BeautifulSoup
 
 MAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 
@@ -19,37 +19,45 @@ EXCLUDE_PATTERNS = [
 ]
 
 
-def get_mail(hp_url):
-    if not hp_url:
+def get_mail(pages):
+    """
+    pages: [(url, html), ...] fetch_site_pages()の戻り値
+    """
+    if not pages:
         return None
 
-    try:
-        html = _fetch_html(hp_url)
-        if not html:
-            return None
+    # 優先度1: mailtoリンク
+    for _, html in pages:
+        result = _try_mailto_link(html)
+        if result:
+            return result
 
-        candidates = MAIL_PATTERN.findall(html)
-        if not candidates:
-            return None
+    # 優先度2: 全文テキストの正規表現
+    for _, html in pages:
+        result = _try_text_pattern(html)
+        if result:
+            return result
 
-        for email in candidates:
-            if _is_valid_email(email):
+    return None
+
+
+def _try_mailto_link(html):
+    soup = BeautifulSoup(html, "lxml")
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if href.lower().startswith("mailto:"):
+            email = href[7:].split("?")[0].strip()
+            if email and _is_valid_email(email):
                 return email
-
-        return None
-
-    except Exception:
-        return None
+    return None
 
 
-def _fetch_html(url):
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=5, allow_redirects=True)
-        resp.raise_for_status()
-        resp.encoding = 'utf-8'
-        return resp.text
-    except requests.RequestException:
-        return None
+def _try_text_pattern(html):
+    candidates = MAIL_PATTERN.findall(html)
+    for email in candidates:
+        if _is_valid_email(email):
+            return email
+    return None
 
 
 def _is_valid_email(email):

@@ -8,6 +8,7 @@ from datetime import datetime
 
 from sheet import fetch_unprocessed_companies, update_companies
 from get_hp import get_hp
+from fetch_pages import fetch_site_pages
 from get_employee import get_employee_count
 from get_mail import get_mail
 from report import send_report
@@ -48,9 +49,17 @@ def process_company(company: dict) -> dict:
         api_error = True
         traceback.print_exc()
 
+    # HPとその関連ページを1回だけ取得し、従業員数・メールの両方で使い回す
+    pages = []
+    if hp_url:
+        try:
+            pages = fetch_site_pages(hp_url)
+        except Exception:
+            traceback.print_exc()
+
     try:
-        if hp_url and not company.get("existing_employee_count"):
-            emp = get_employee_count(hp_url)
+        if pages and not company.get("existing_employee_count"):
+            emp = get_employee_count(pages)
             if emp:
                 result["employee_count"] = emp
                 got_any = True
@@ -58,8 +67,8 @@ def process_company(company: dict) -> dict:
         traceback.print_exc()
 
     try:
-        if hp_url and not company.get("existing_mail"):
-            mail = get_mail(hp_url)
+        if pages and not company.get("existing_mail"):
+            mail = get_mail(pages)
             if mail:
                 result["mail"] = mail
                 got_any = True
